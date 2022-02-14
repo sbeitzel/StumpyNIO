@@ -1,4 +1,4 @@
-# stumpylib
+# StumpyNIO
 
 This library contains definitions for an SMTP server and a POP3 server, backed by a mail store
 which will hold up to some fixed number of messages. The servers do not actually perform
