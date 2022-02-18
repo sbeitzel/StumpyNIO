@@ -31,8 +31,9 @@ public class BaseServer: ObservableObject {
         }
     }
     private let label: String
-    private let bootstrap: ServerBootstrap
-    private var serverChannel: Channel?
+    private let group: EventLoopGroup
+    private var handlers: [ChannelHandler]
+    private var serverChannels: [Channel] = []
 
     @Published public var isRunning: Bool = false
     public let serverStats: ServerStats
@@ -43,17 +44,28 @@ public class BaseServer: ObservableObject {
                 label: String,
                 stats: ServerStats,
                 handlers: [ChannelHandler]) {
+        self.handlers = handlers
         self.label = label
-        logger = Logger(label: label)
-        logger[metadataKey: "origin"] = "[\(label)]"
-        serverStats = stats
+        self.group = group
+        self.serverStats = stats
         self.port = port
         self.mailStore = store
-        self.bootstrap = ServerBootstrap(group: group)
+        self.logger = Logger(label: label)
+        logger[metadataKey: "origin"] = "[\(label)]"
+    }
+
+    public func setHandlers(to handlerList: [ChannelHandler]) -> Bool {
+        guard isRunning == false else { return false }
+        handlers = handlerList
+        return true
+    }
+
+    func makeBootstrap() -> ServerBootstrap {
+        return ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.addHandlers(handlers)
+                channel.pipeline.addHandlers(self.handlers)
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
@@ -65,15 +77,32 @@ public class BaseServer: ObservableObject {
             isRunning = true
             Task {
                 do {
-                    serverChannel = try bootstrap.bind(host: "0.0.0.0", port: port).wait()
-                    logger.info("Server started, listening on address: \(serverChannel!.localAddress!.description)")
-                    try serverChannel!.closeFuture.wait()
-                    logger.info("Server stopped.")
-                    DispatchQueue.main.async {
-                        self.isRunning = false
+                    let bootstrap = makeBootstrap()
+                    for address in ["0.0.0.0", "::"] {
+                        let serverChannel = try bootstrap.bind(host: address, port: port).wait()
+                        self.serverChannels.append(serverChannel)
+                        logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+                    }
+                    if !serverChannels.isEmpty {
+                        try serverChannels.first!.closeFuture.wait()
+                        logger.info("Server stopped.")
+                        DispatchQueue.main.async {
+                            self.isRunning = false
+                        }
                     }
                 } catch {
                     logger.critical("Error running \(label) server: \(error.localizedDescription)")
+                    for channel in serverChannels {
+                        do {
+                            try await channel.close()
+                        } catch {
+                            self.logger.info("Error closing channel: \(error.localizedDescription)")
+                        }
+                    }
+                    serverChannels.removeAll()
+                    DispatchQueue.main.async {
+                        self.isRunning = false
+                    }
                 }
             }
         }
@@ -83,22 +112,30 @@ public class BaseServer: ObservableObject {
         DispatchQueue.main.async {
             self.isRunning = true
         }
-        serverChannel = try bootstrap.bind(host: "0.0.0.0", port: serverPort).wait()
-        logger.info("Server started, listening on address: \(serverChannel!.localAddress!.description)")
-        serverChannel!.closeFuture.whenComplete({ _ in
-            DispatchQueue.main.async {
-                self.logger.info("Server stopped.")
-                self.isRunning = false
-            }
-        })
-        return serverChannel!.closeFuture
+        let bootstrap = makeBootstrap()
+        for address in ["0.0.0.0", "::"] {
+            let serverChannel = try bootstrap.bind(host: address, port: port).wait()
+            serverChannels.append(serverChannel)
+            logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+        }
+        if let channel = serverChannels.first {
+            channel.closeFuture.whenComplete({ _ in
+                DispatchQueue.main.async {
+                    self.logger.info("Server stopped.")
+                    self.serverChannels.removeAll()
+                    self.isRunning = false
+                }
+            })
+            return channel.closeFuture
+        }
+        throw ServerError.errorStarting
     }
 
     public func stop() {
-        if let channel = serverChannel {
-            self.logger.info("\(label) server shutting down")
+        for channel in serverChannels {
+            logger.info("\(label) server shutting down")
             _ = channel.close(mode: CloseMode.all)
-            self.serverChannel = nil
         }
+        serverChannels.removeAll()
     }
 }
