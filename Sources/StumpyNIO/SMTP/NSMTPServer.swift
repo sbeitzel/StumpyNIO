@@ -4,6 +4,8 @@
 import NIO
 
 public class NSMTPServer: BaseServer {
+    let stats: ServerStats
+    let store: MailStore
 
     /// Create a new NIO-based dummy SMTP server
     ///
@@ -27,11 +29,24 @@ public class NSMTPServer: BaseServer {
             SMTPSessionHandler(with: store, acceptMultipleMails: acceptMultipleMails),
             SMTPActionHandler()
         ]
+        self.stats = stats
+        self.store = store
         super.init(group: group,
                    port: port,
                    store: store,
                    label: label,
                    stats: stats,
                    handlers: handlers)
+    }
+
+    public func allowMultipleEmails(_ value: Bool) -> Bool {
+        let handlers: [ChannelHandler] = [
+            BackPressureHandler(),
+            StatsHandler(stats),
+            DebugLoggingHandler(),
+            SMTPSessionHandler(with: store, acceptMultipleMails: value),
+            SMTPActionHandler()
+        ]
+        return setHandlers(to: handlers)
     }
 }
