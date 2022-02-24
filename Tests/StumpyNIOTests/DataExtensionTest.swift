@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import StumpyLib
+@testable import StumpyNIO
 
 class DataExtensionTest: XCTestCase {
     private var testData: Data = Data()
