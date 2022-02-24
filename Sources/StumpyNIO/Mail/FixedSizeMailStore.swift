@@ -18,7 +18,7 @@ import OpenCombineShim
 public actor FixedSizeMailStore: MailStore, ObservableObject, Identifiable {
     nonisolated public let id: String
 
-    private let maxSize: Int
+    private var maxSize: Int
     private var messages = [MailMessage]()
 
     /// Creates a FixedSizeMailStore configured to hold up to the given number of messages.
@@ -30,6 +30,17 @@ public actor FixedSizeMailStore: MailStore, ObservableObject, Identifiable {
 
     public func messageCount() async -> Int {
         return messages.count
+    }
+
+    public func adjustSize(to size: Int) {
+        guard size > 0 else { return }
+        maxSize = size
+        while messages.count > maxSize {
+            messages.remove(at: 0)
+        }
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
     }
 
     /// Appends a new message to the store. If this would result in the store
