@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+* Don't bail if we can only bind to one of (IPv6, IPv4)
+
 ## [1.2.0]
 
 * Allow `FixedSizeMailStore` to have its size adjusted after creation

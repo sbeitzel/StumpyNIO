@@ -78,10 +78,16 @@ public class BaseServer: ObservableObject {
             Task {
                 do {
                     let bootstrap = makeBootstrap()
-                    for address in ["0.0.0.0", "::"] {
+                    for address in ["::", "0.0.0.0"] {
+                        do {
                         let serverChannel = try bootstrap.bind(host: address, port: port).wait()
                         self.serverChannels.append(serverChannel)
                         logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+                            break
+                        } catch {
+                            // unable to bind to that address. Oh well.
+                            logger.debug("Unable to bind to \(address): \(error.localizedDescription)")
+                        }
                     }
                     if !serverChannels.isEmpty {
                         try serverChannels.first!.closeFuture.wait()
@@ -89,6 +95,9 @@ public class BaseServer: ObservableObject {
                         DispatchQueue.main.async {
                             self.isRunning = false
                         }
+                    } else {
+                        logger.critical("Unable to start a server!")
+                        throw ServerError.errorStarting
                     }
                 } catch {
                     logger.critical("Error running \(label) server: \(error.localizedDescription)")
