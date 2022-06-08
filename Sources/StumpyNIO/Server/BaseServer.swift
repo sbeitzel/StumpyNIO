@@ -78,10 +78,20 @@ public class BaseServer: ObservableObject {
             Task {
                 do {
                     let bootstrap = makeBootstrap()
-                    for address in ["0.0.0.0", "::"] {
-                        let serverChannel = try bootstrap.bind(host: address, port: port).wait()
-                        self.serverChannels.append(serverChannel)
-                        logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+                    var success = false
+                    for address in ["::", "0.0.0.0"] {
+                        logger.info("Trying to start \(label) on host: \(address)")
+                        do {
+                            if !success {
+                                let serverChannel = try bootstrap.bind(host: address, port: port).wait()
+                                self.serverChannels.append(serverChannel)
+                                logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+                                success = true
+                            }
+                        } catch {
+                            // unable to bind to that address. Oh well.
+                            logger.info("Unable to bind to \(address): \(error.localizedDescription)")
+                        }
                     }
                     if !serverChannels.isEmpty {
                         try serverChannels.first!.closeFuture.wait()
@@ -89,6 +99,9 @@ public class BaseServer: ObservableObject {
                         DispatchQueue.main.async {
                             self.isRunning = false
                         }
+                    } else {
+                        logger.critical("Unable to start a server!")
+                        throw ServerError.errorStarting
                     }
                 } catch {
                     logger.critical("Error running \(label) server: \(error.localizedDescription)")
@@ -113,10 +126,20 @@ public class BaseServer: ObservableObject {
             self.isRunning = true
         }
         let bootstrap = makeBootstrap()
-        for address in ["0.0.0.0", "::"] {
-            let serverChannel = try bootstrap.bind(host: address, port: port).wait()
-            serverChannels.append(serverChannel)
-            logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+        var success = false
+        for address in ["::", "0.0.0.0"] {
+            logger.info("Trying to start \(label) on host: \(address)")
+            do {
+                if !success {
+                    let serverChannel = try bootstrap.bind(host: address, port: port).wait()
+                    self.serverChannels.append(serverChannel)
+                    logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+                    success = true
+                }
+            } catch {
+                // unable to bind to that address. Oh well.
+                logger.info("Unable to bind to \(address): \(error.localizedDescription)")
+            }
         }
         if let channel = serverChannels.first {
             channel.closeFuture.whenComplete({ _ in
