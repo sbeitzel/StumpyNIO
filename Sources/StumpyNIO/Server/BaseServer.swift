@@ -78,12 +78,15 @@ public class BaseServer: ObservableObject {
             Task {
                 do {
                     let bootstrap = makeBootstrap()
+                    var success = false
                     for address in ["::", "0.0.0.0"] {
                         do {
-                        let serverChannel = try bootstrap.bind(host: address, port: port).wait()
-                        self.serverChannels.append(serverChannel)
-                        logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
-                            break
+                            if !success {
+                                let serverChannel = try bootstrap.bind(host: address, port: port).wait()
+                                self.serverChannels.append(serverChannel)
+                                logger.info("Server started, listening on address: \(serverChannel.localAddress!.description)")
+                                success = true
+                            }
                         } catch {
                             // unable to bind to that address. Oh well.
                             logger.debug("Unable to bind to \(address): \(error.localizedDescription)")
