@@ -80,7 +80,7 @@ public class BaseServer: ObservableObject {
                     let bootstrap = makeBootstrap()
                     var success = false
                     for address in ["::", "0.0.0.0"] {
-                        logger.info("Trying to start on host: \(address)")
+                        print("Trying to start \(label) on host: \(address)")
                         do {
                             if !success {
                                 let serverChannel = try bootstrap.bind(host: address, port: port).wait()
